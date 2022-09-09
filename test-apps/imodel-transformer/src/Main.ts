@@ -403,7 +403,22 @@ void (async () => {
       transformer.dispose();
     } else {
 
-      const sourceDbSchemaString = "<?xml version= \"1.0\" encoding= \"UTF-8\"?>\n<ECSchema schemaName= \"IFCDynamic\" alias= \"IFC\" version= \"100.04.05\" xmlns= \"http://www.bentley.com/schemas/Bentley.ECXML.3.2\">    \n    <ECSchemaReference name= \"BisCore\" version= \"01.00.14\" alias= \"bis\" />    \n    <ECSchemaReference name= \"Units\" version= \"01.00.07\" alias= \"u\" />    \n    <ECCustomAttributes>        \n        <DynamicSchema xmlns= \"CoreCustomAttributes.01.00.03\" />        \n    </ECCustomAttributes>    \n    <ECEntityClass typeName= \"A\" displayLabel= \"A\">        \n        <BaseClass>bis:PhysicalElement</BaseClass>        \n </ECEntityClass> \n <ECEntityClass typeName= \"B\" displayLabel= \"B\"> \n <BaseClass>bis:PhysicalElement</BaseClass> \n </ECEntityClass></ECSchema>";
+      const sourceDbSchemaString = `
+        <?xml version= "1.0" encoding= "UTF-8"?>
+        <ECSchema schemaName= "IFCDynamic" alias= "IFC" version= "100.04.05" xmlns= "http://www.bentley.com/schemas/Bentley.ECXML.3.2">
+          <ECSchemaReference name="BisCore" version= "01.00.14" alias= "bis" />
+          <ECSchemaReference name="Units" version= "01.00.07" alias= "u" />
+          <ECCustomAttributes>
+            <DynamicSchema xmlns= "CoreCustomAttributes.01.00.03" />
+          </ECCustomAttributes>
+          <ECEntityClass typeName="A" displayLabel= "A">
+            <BaseClass>bis:PhysicalElement</BaseClass>
+          </ECEntityClass>
+          <ECEntityClass typeName="B" displayLabel= "B">
+            <BaseClass>bis:PhysicalElement</BaseClass>
+          </ECEntityClass>
+        </ECSchema>
+      `;
       await sourceDb.importSchemaStrings([sourceDbSchemaString]);
 
       const sourceSubjectId = Subject.insert(sourceDb, IModel.rootSubjectId, "S1");
