@@ -5189,11 +5189,11 @@ export type LocalFileName = string;
 // @public
 export interface Localization {
     changeLanguage(language: string): Promise<void>;
-    getEnglishString(namespace: string, key: string | string[], options?: TranslationOptions): string;
+    getEnglishString(namespace: string, key: string | string[], options?: LocalizationOptions): string;
     getLanguageList(): readonly string[];
     getLocalizedKeys(inputString: string): string;
-    getLocalizedString(key: string | string[], options?: TranslationOptions): string;
-    getLocalizedStringWithNamespace(namespace: string, key: string | string[], options?: TranslationOptions): string;
+    getLocalizedString(key: string | string[], options?: LocalizationOptions): string;
+    getLocalizedStringWithNamespace(namespace: string, key: string | string[], options?: LocalizationOptions): string;
     // @internal (undocumented)
     getNamespacePromise(name: string): Promise<void> | undefined;
     initialize(namespaces: string[]): Promise<void>;
@@ -9266,16 +9266,6 @@ export interface TileTreeProps {
 // @public
 export interface TileVersionInfo {
     formatVersion: number;
-}
-
-// @public
-export interface TranslationOptions {
-    [key: string]: any;
-    context?: any;
-    count?: number;
-    defaultValue?: any;
-    fallbackLng?: string;
-    lngs?: string[];
 }
 
 // @alpha
