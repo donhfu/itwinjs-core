@@ -18,7 +18,7 @@ import {
 import * as BackendTestUtils from "@itwin/core-backend/lib/cjs/test";
 import { DbResult, Guid, Id64, Id64String, Logger, LogLevel, OpenMode } from "@itwin/core-bentley";
 import {
-  AxisAlignedBox3d, BriefcaseIdValue, Code, CodeScopeSpec, CodeSpec, ColorDef, CreateIModelProps, DefinitionElementProps, ElementProps,
+  AxisAlignedBox3d, BriefcaseIdValue, Code, CodeProps, CodeScopeSpec, CodeSpec, ColorDef, CreateIModelProps, DefinitionElementProps, ElementProps,
   ExternalSourceAspectProps, IModel, IModelError, PhysicalElementProps, Placement3d, QueryRowFormat, RelatedElement, RelationshipProps,
 } from "@itwin/core-common";
 import { Point3d, Range3d, StandardViewIndex, Transform, YawPitchRollAngles } from "@itwin/core-geometry";
@@ -30,7 +30,7 @@ import {
 import { KnownTestLocations } from "../KnownTestLocations";
 
 import "./TransformerTestStartup"; // calls startup/shutdown IModelHost before/after all tests
-import { SchemaLoader } from "@itwin/ecschema-metadata";
+import { SchemaKey, SchemaLoader } from "@itwin/ecschema-metadata";
 
 describe("IModelTransformer", () => {
   const outputDir = path.join(KnownTestLocations.outputDir, "IModelTransformer");
@@ -1794,5 +1794,117 @@ describe("IModelTransformer", () => {
 
     sourceDb.close();
     targetDb.close();
+  });
+
+  it.only("remap from deleted class", async () => {
+    class RemapClassTransformer extends IModelTransformer {
+      public override async processSchemas() {
+        await super.processSchemas();
+        this.context.remapElementClass("IFCDynamic:B", "IFCDynamic:A");
+      }
+      public override shouldExportSchema(schemaKey: SchemaKey): boolean {
+        return schemaKey.toString() !== "IFCDynamic.100.04.05";
+      }
+    }
+    const sourceDbPath = IModelTransformerTestUtils.prepareOutputFile("IModelTransformer", "RemapDeleted.bim");
+    const sourceDb = SnapshotDb.createEmpty(sourceDbPath, { rootSubject: { name: "RemapDeleted" } });
+
+    const schemaWithAAndB = `<?xml version="1.0" encoding="UTF-8"?>
+        <?xml version= "1.0" encoding= "UTF-8"?>
+        <ECSchema schemaName= "IFCDynamic" alias= "IFC" version= "100.04.05" xmlns= "http://www.bentley.com/schemas/Bentley.ECXML.3.2">
+          <ECSchemaReference name="BisCore" version= "01.00.14" alias= "bis" />
+          <ECSchemaReference name="Units" version= "01.00.07" alias= "u" />
+          <ECCustomAttributes>
+            <DynamicSchema xmlns= "CoreCustomAttributes.01.00.03" />
+          </ECCustomAttributes>
+          <ECEntityClass typeName="A" displayLabel= "A">
+            <BaseClass>bis:PhysicalElement</BaseClass>
+          </ECEntityClass>
+          <ECEntityClass typeName="B" displayLabel= "B">
+            <BaseClass>bis:PhysicalElement</BaseClass>
+          </ECEntityClass>
+        </ECSchema>`
+    ;
+    await sourceDb.importSchemaStrings([schemaWithAAndB]);
+
+    const sourceSubjectId = Subject.insert(sourceDb, IModel.rootSubjectId, "S1");
+    const physicalModelId = PhysicalModel.insert(sourceDb, sourceSubjectId, "M1");
+    const spatialCategoryId = SpatialCategory.insert(sourceDb, IModel.dictionaryId, "C1", {});
+
+    const physicalElementA: PhysicalElementProps = {
+      classFullName: "IFCDynamic:A",
+      model: physicalModelId,
+      category: spatialCategoryId,
+      code: new Code({ scope: physicalModelId, spec: "0x1", value: "PhysicalA" }),
+      userLabel: "PhysicalA",
+    };
+    const physicalElementB: PhysicalElementProps = {
+      classFullName: "IFCDynamic:B",
+      model: physicalModelId,
+      category: spatialCategoryId,
+      code: new Code({ scope: physicalModelId, spec: "0x1", value: "PhysicalB" }),
+      userLabel: "PhysicalB",
+    };
+
+    sourceDb.elements.insertElement(physicalElementA);
+    sourceDb.elements.insertElement(physicalElementB);
+    sourceDb.saveChanges();
+
+    const targetDbPath = IModelTransformerTestUtils.prepareOutputFile("IModelTransformer", "RemapDeletedTarget.bim");
+    const targetDb = SnapshotDb.createEmpty(targetDbPath, { rootSubject: { name: "RemapDeletedTarget" } });
+
+    const schemaWithoutB = `
+        <?xml version= "1.0" encoding= "UTF-8"?>
+        <ECSchema schemaName= "IFCDynamic" alias= "IFC" version= "100.04.05" xmlns= "http://www.bentley.com/schemas/Bentley.ECXML.3.2">
+          <ECSchemaReference name= "BisCore" version= "01.00.14" alias= "bis" />
+          <ECSchemaReference name= "Units" version= "01.00.07" alias= "u" />
+          <ECCustomAttributes>
+            <DynamicSchema xmlns= "CoreCustomAttributes.01.00.03" />
+          </ECCustomAttributes>
+          <ECEntityClass typeName= "A" displayLabel= "A">
+            <BaseClass>bis:PhysicalElement</BaseClass>
+          </ECEntityClass>
+        </ECSchema>`
+    ;
+
+    await targetDb.importSchemaStrings([schemaWithoutB]);
+    targetDb.saveChanges();
+
+    const transformer = new RemapClassTransformer(sourceDb, targetDb);
+    await transformer.processSchemas();
+    await transformer.processAll();
+
+    targetDb.saveChanges();
+
+    const targetPhysicalModelId = IModelTransformerTestUtils.queryByCodeValue(targetDb, "M1");
+    const targetSpatialCategoryId = IModelTransformerTestUtils.queryByCodeValue(targetDb, "C1");
+    const targetPhysicalElementAId = IModelTransformerTestUtils.queryByCodeValue(targetDb, "PhysicalA");
+    const targetPhysicalElementBId = IModelTransformerTestUtils.queryByCodeValue(targetDb, "PhysicalB");
+    const targetPhysicalElementAProps = targetDb.elements.getElementProps(targetPhysicalElementAId);
+    const targetPhysicalElementBProps = targetDb.elements.getElementProps(targetPhysicalElementBId);
+
+    expect(targetPhysicalElementAProps).to.contain({
+      classFullName: "IFCDynamic:A", // class was remapped
+      model: targetPhysicalModelId,
+      category: targetSpatialCategoryId,
+      userLabel: "PhysicalA",
+    });
+    expect(targetPhysicalElementAProps.code).to.deep.equal(
+      new Code({ scope: targetPhysicalModelId, spec: "0x1", value: "PhysicalA" }).toJSON()
+    );
+
+    expect(targetPhysicalElementBProps).to.contain({
+      classFullName: "IFCDynamic:A", // class was remapped
+      model: targetPhysicalModelId,
+      category: targetSpatialCategoryId,
+      userLabel: "PhysicalB",
+    });
+    expect(targetPhysicalElementBProps.code).to.deep.equal(
+      new Code({ scope: targetPhysicalModelId, spec: "0x1", value: "PhysicalB" }).toJSON()
+    );
+
+    sourceDb.close();
+    targetDb.close();
+    transformer.dispose();
   });
 });
