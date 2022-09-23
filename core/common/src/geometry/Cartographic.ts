@@ -113,9 +113,9 @@ export class Cartographic implements CartographicProps {
   private static _cartesianToCartographicN = new Point3d();
   private static _cartesianToCartographicP = new Point3d();
   private static _cartesianToCartographicH = new Vector3d();
-  private static _wgs84OneOverRadii = new Point3d(1.0 / 6378137.0, 1.0 / 6378137.0, 1.0 / 6356752.3142451793);
-  private static _wgs84OneOverRadiiSquared = new Point3d(1.0 / (6378137.0 * 6378137.0), 1.0 / (6378137.0 * 6378137.0), 1.0 / (6356752.3142451793 * 6356752.3142451793));
-  private static _wgs84RadiiSquared = new Point3d(6378137.0 * 6378137.0, 6378137.0 * 6378137.0, 6356752.3142451793 * 6356752.3142451793);
+  private static _wgs84OneOverRadii = new Point3d(1.0 / Constant.earthRadiusWGS84.equator, 1.0 / Constant.earthRadiusWGS84.equator, 1.0 / Constant.earthRadiusWGS84.polar);
+  private static _wgs84OneOverRadiiSquared = new Point3d(1.0 / (Constant.earthRadiusWGS84.equator * Constant.earthRadiusWGS84.equator), 1.0 / (Constant.earthRadiusWGS84.equator * Constant.earthRadiusWGS84.equator), 1.0 / (Constant.earthRadiusWGS84.polar * Constant.earthRadiusWGS84.polar));
+  private static _wgs84RadiiSquared = new Point3d(Constant.earthRadiusWGS84.equator * Constant.earthRadiusWGS84.equator, Constant.earthRadiusWGS84.equator * Constant.earthRadiusWGS84.equator, Constant.earthRadiusWGS84.polar * Constant.earthRadiusWGS84.polar);
   private static _wgs84CenterToleranceSquared = 0.1;
   private static _scratchN = new Vector3d();
   private static _scratchK = new Vector3d();
