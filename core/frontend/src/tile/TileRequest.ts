@@ -163,12 +163,8 @@ export class TileRequest {
         data = response;
       else if (response instanceof ArrayBuffer)
         data = new Uint8Array(response);
-      else if (typeof response === "object") {
-        if ("content" in response)
-          content = response.content;
-        else if ("data" in response)
-          data = response;
-      }
+      else if (typeof response === "object" && undefined !== response.content)
+        content = response.content;
     }
 
     if (!content && !data) {
@@ -201,12 +197,12 @@ export namespace TileRequest { // eslint-disable-line no-redeclare
    * can produce a [[RenderGraphic]].
    * @public
    */
-  export type Response = Uint8Array | ArrayBuffer | string | ImageSource | { content: TileContent } | { data: any } | undefined;
+  export type Response = Uint8Array | ArrayBuffer | string | ImageSource | { content: TileContent } | undefined;
 
   /** The input to [[Tile.readContent]], to be converted into a [[RenderGraphic]].
    * @public
    */
-  export type ResponseData = Uint8Array | ImageSource | { data: any };
+  export type ResponseData = Uint8Array | ImageSource;
 
   /** The states through which a [[TileRequest]] proceeds. During the first 3 states, the [[Tile]]'s `request` member is defined,
    * and its [[Tile.LoadStatus]] is computed based on the state of its request.

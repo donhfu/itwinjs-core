@@ -48,30 +48,21 @@ const additiveRefinementThreshold = 10000;    // Additive tiles (Cesium OSM tile
 const additiveRefinementDepthLimit = 20;
 const scratchFrustum = new Frustum();
 
-/** A [[Tile]] within a [[RealityTileTree]], representing part of a reality model (e.g., a point cloud or photogrammetry mesh) or 3d terrain with map imagery.
- * @beta
+/**
+ * A specialization of tiles that represent reality tiles.  3D Tilesets and maps use this class and have their own optimized traversal and lifetime management.
+ * @internal
  */
 export class RealityTile extends Tile {
-  /** @internal */
   public readonly transformToRoot?: Transform;
-  /** @internal */
   public readonly additiveRefinement?: boolean;
-  /** @internal */
   public readonly noContentButTerminateOnSelection?: boolean;
-  /** @internal */
   public readonly rangeCorners?: Point3d[];
-  /** @internal */
   public readonly region?: RealityTileRegion;
-  /** @internal */
   protected _geometry?: RealityTileGeometry;
-  /** @internal */
   private _everDisplayed = false;
-  /** @internal */
   protected _reprojectionTransform?: Transform;
-  /** @internal */
   private _reprojectedGraphic?: RenderGraphic;
 
-  /** @internal */
   public constructor(props: RealityTileParams, tree: RealityTileTree) {
     super(props, tree);
     this.transformToRoot = props.transformToRoot;
@@ -94,30 +85,20 @@ export class RealityTile extends Tile {
       this.transformToRoot.multiplyRange(this._contentRange, this._contentRange);
   }
 
-  /** @internal */
   public override setContent(content: RealityTileContent): void {
     super.setContent(content);
     this._geometry = content.geometry;
   }
 
-  /** @internal */
   public get realityChildren(): RealityTile[] | undefined { return this.children as RealityTile[] | undefined; }
-  /** @internal */
   public get realityParent(): RealityTile { return this.parent as RealityTile; }
-  /** @internal */
   public get realityRoot(): RealityTileTree { return this.tree as RealityTileTree; }
-  /** @internal */
   public get graphicType(): TileGraphicType | undefined { return undefined; }     // If undefined, use tree type.
-  /** @internal */
   public get maxDepth(): number { return this.realityRoot.loader.maxDepth; }
-  /** @internal */
   public get isPointCloud() { return this.realityRoot.loader.containsPointClouds; }
-  /** @internal */
   public get isLoaded() { return this.loadStatus === TileLoadStatus.Ready; }      // Reality tiles may depend on secondary tiles (maps) so can ge loaded but not ready.
-  /** @internal */
   public get geometry(): RealityTileGeometry | undefined { return this._geometry;  }
 
-  /** @internal */
   public override get isDisplayable(): boolean {
     if (this.noContentButTerminateOnSelection)
       return false;
@@ -125,32 +106,25 @@ export class RealityTile extends Tile {
       return super.isDisplayable;
   }
 
-  /** @internal */
   public markUsed(args: TileDrawArgs): void {
     args.markUsed(this);
   }
 
-  /** @internal */
   public markDisplayed(): void {
     this._everDisplayed = true;
   }
 
-  /** @internal */
   public isOccluded(_viewingSpace: ViewingSpace): boolean {
     return false;
   }
 
-  /** @internal */
   public get channel(): TileRequestChannel {
     return this.realityRoot.loader.getRequestChannel(this);
   }
 
-  /** @internal */
   public async requestContent(isCanceled: () => boolean): Promise<TileRequest.Response> {
     return this.realityRoot.loader.requestTileContent(this, isCanceled);
   }
-
-  /** @internal */
   private useAdditiveRefinementStepchildren() {
     // Create additive stepchildren only if we are this tile is additive and we are repojecting and the radius exceeds the additiveRefinementThreshold.
     // This criteria is currently only met by the Cesium OSM tileset.
@@ -158,7 +132,6 @@ export class RealityTile extends Tile {
     return this.additiveRefinement && this.isDisplayable && rangeDiagonal > additiveRefinementThreshold && this.depth < additiveRefinementDepthLimit && this.realityRoot.doReprojectChildren(this);
   }
 
-  /** @internal */
   protected _loadChildren(resolve: (children: Tile[] | undefined) => void, reject: (error: Error) => void): void {
     this.realityRoot.loader.loadChildren(this).then((children: Tile[] | undefined) => {
 
@@ -175,32 +148,24 @@ export class RealityTile extends Tile {
     });
   }
 
-  /** @internal */
   public async readContent(data: TileRequest.ResponseData, system: RenderSystem, isCanceled?: () => boolean): Promise<TileContent> {
     return this.realityRoot.loader.loadTileContent(this, data, system, isCanceled);
   }
 
-  /** @internal */
   public override computeLoadPriority(viewports: Iterable<Viewport>, users: Iterable<TileUser>): number {
     return this.realityRoot.loader.computeTilePriority(this, viewports, users);
   }
 
-  /** @internal */
   public getContentClip(): ClipVector | undefined {
     return ClipVector.createCapture([ClipShape.createBlock(this.contentRange, ClipMaskXYZRangePlanes.All)]);
   }
 
-  /** Allow tile to select additional tiles (Terrain Imagery...)
-   * @internal
-   */
+  // Allow tile to select additional tiles (Terrain Imagery...)
   public selectSecondaryTiles(_args: TileDrawArgs, _context: TraversalSelectionContext) { }
 
-  /** An upsampled tile is not loadable - will override to return loadable parent.
-   * @internal
-   */
+  // An upsampled tile is not loadable - will override to return loadable parent.
   public get loadableTile(): RealityTile { return this; }
 
-  /** @internal */
   public preloadRealityTilesAtDepth(depth: number, context: TraversalSelectionContext, args: TileDrawArgs) {
     if (this.depth === depth) {
       context.preload(this, args);
@@ -215,7 +180,6 @@ export class RealityTile extends Tile {
     }
   }
 
-  /** @internal */
   protected selectRealityChildren(context: TraversalSelectionContext, args: TileDrawArgs, traversalDetails: TraversalDetails) {
     const childrenLoadStatus = this.loadChildren(); // NB: asynchronous
     if (TileTreeLoadStatus.Loading === childrenLoadStatus) {
@@ -233,8 +197,6 @@ export class RealityTile extends Tile {
       traversalChildren.combine(traversalDetails);
     }
   }
-
-  /** @internal */
   public addBoundingGraphic(builder: GraphicBuilder, color: ColorDef) {
     builder.setSymbology(color, color, 3);
     let corners = this.rangeCorners ? this.rangeCorners : this.range.corners();
@@ -243,7 +205,6 @@ export class RealityTile extends Tile {
     builder.addRangeBoxFromCorners(corners);
   }
 
-  /** @internal */
   public reproject(rootReprojection: Transform) {
     this._reprojectionTransform = rootReprojection;
     rootReprojection.multiplyRange(this.range, this.range);
@@ -254,7 +215,6 @@ export class RealityTile extends Tile {
       rootReprojection.multiplyPoint3dArrayInPlace(this.rangeCorners);
   }
 
-  /** @internal */
   public allChildrenIncluded(tiles: Tile[]) {
     if (this.children === undefined || tiles.length !== this.children.length)
       return false;
@@ -264,7 +224,6 @@ export class RealityTile extends Tile {
     return true;
   }
 
-  /** @internal */
   protected getLoadedRealityChildren(args: TileDrawArgs): boolean {
     if (this._childrenLoadStatus !== TileTreeLoadStatus.Loaded || this.realityChildren === undefined)
       return false;
@@ -277,11 +236,8 @@ export class RealityTile extends Tile {
     }
     return true;
   }
-
-  /** @internal */
   public forceSelectRealityTile(): boolean { return false; }
 
-  /** @internal */
   public selectRealityTiles(context: TraversalSelectionContext, args: TileDrawArgs, traversalDetails: TraversalDetails) {
     const visibility = this.computeVisibilityFactor(args);
     if (visibility < 0)
@@ -319,7 +275,6 @@ export class RealityTile extends Tile {
     }
   }
 
-  /** @internal */
   public purgeContents(olderThan: BeTimePoint): void {
     // Discard contents of tiles that have not been "used" recently, where "used" may mean: selected/preloaded for display or content requested.
     // Note we do not discard the child Tile objects themselves.
@@ -332,7 +287,6 @@ export class RealityTile extends Tile {
         child.purgeContents(olderThan);
   }
 
-  /** @internal */
   public computeVisibilityFactor(args: TileDrawArgs): number {
     if (this.isEmpty)
       return -1;
@@ -355,7 +309,6 @@ export class RealityTile extends Tile {
     return this.maximumSize / args.getPixelSize(this);
   }
 
-  /** @internal */
   public preloadTilesInFrustum(args: TileDrawArgs, context: TraversalSelectionContext, preloadSizeModifier: number) {
     const visibility = this.computeVisibilityFactor(args);
     if (visibility < 0)
@@ -375,7 +328,6 @@ export class RealityTile extends Tile {
     }
   }
 
-  /** @internal */
   protected get _anyChildNotFound(): boolean {
     if (undefined !== this.children)
       for (const child of this.children)
@@ -384,8 +336,6 @@ export class RealityTile extends Tile {
 
     return this._childrenLoadStatus === TileTreeLoadStatus.NotFound;
   }
-
-  /** @internal */
   public override getSizeProjectionCorners(): Point3d[] | undefined {
     if (!this.tree.isContentUnbounded)
       return undefined;           // For a non-global tree use the standard size algorithm.
@@ -397,10 +347,8 @@ export class RealityTile extends Tile {
     return this.region ? this.rangeCorners.slice(4) : this.rangeCorners;
   }
 
-  /** @internal */
   public get isStepChild() { return false; }
 
-  /** @internal */
   protected loadAdditiveRefinementChildren(resolve: (children: Tile[]) => void): void {
     const region = this.region;
     const corners = this.rangeCorners;
@@ -430,8 +378,6 @@ export class RealityTile extends Tile {
     }
     resolve(stepChildren);
   }
-
-  /** @internal */
   public override produceGraphics(): RenderGraphic | undefined {
     if (undefined === this._reprojectionTransform)
       return super.produceGraphics();
@@ -444,18 +390,14 @@ export class RealityTile extends Tile {
     return this._reprojectedGraphic;
   }
 
-  /** @internal */
   public get unprojectedGraphic(): RenderGraphic | undefined {
     return this._graphic;
   }
-
-  /** @internal */
   public override disposeContents(): void {
     super.disposeContents();
     this._reprojectedGraphic = dispose(this._reprojectedGraphic);
   }
 
-  /** @internal */
   public collectTileGeometry(collector: TileGeometryCollector): void {
     const status = collector.collectTile(this);
 

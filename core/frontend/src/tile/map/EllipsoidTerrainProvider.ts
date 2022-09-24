@@ -6,17 +6,20 @@
  * @module Tiles
  */
 
-import { assert } from "@itwin/core-bentley";
+import { assert, Id64String } from "@itwin/core-bentley";
 import { Angle, Ellipsoid, EllipsoidPatch, Point2d, Point3d, Range1d, Range3d, Transform } from "@itwin/core-geometry";
-import { RealityMeshParams, RealityMeshParamsBuilder } from "../../render/RealityMeshParams";
-import {
-  MapCartoRectangle, MapTile, MapTilingScheme, QuadId, ReadMeshArgs, TerrainMeshProvider, TerrainMeshProviderOptions, TileRequest, WebMercatorTilingScheme,
-} from "../internal";
+import { QParams3d, QPoint2d } from "@itwin/core-common";
+import { IModelConnection } from "../../IModelConnection";
+import { TerrainMeshPrimitive } from "../../render/primitives/mesh/TerrainMeshPrimitive";
+import { MapCartoRectangle, MapTile, MapTilingScheme, QuadId, TerrainMeshProvider, WebMercatorTilingScheme } from "../internal";
 
 const scratchPoint2d = Point2d.createZero();
 const scratchPoint = Point3d.createZero();
+const scratchQPoint2d = new QPoint2d();
 const scratchEllipsoid = Ellipsoid.create(Transform.createIdentity());
 const scratchZeroRange = Range1d.createXX(0, 0);
+let scratch8Points: Array<Point3d>;
+let scratch8Params: Array<Point2d>;
 
 /** Terrain provider that produces geometry that represents a smooth ellipsoid without any height perturbations.
  * The area within the project extents are represented as planar tiles and other tiles are facetted approximations
@@ -26,105 +29,85 @@ const scratchZeroRange = Range1d.createXX(0, 0);
  */
 export class EllipsoidTerrainProvider extends TerrainMeshProvider {
   private _tilingScheme = new WebMercatorTilingScheme();
-  private readonly _wantSkirts: boolean;
-
-  public constructor(opts: TerrainMeshProviderOptions) {
-    super();
-    this._wantSkirts = opts.wantSkirts;
+  constructor(iModel: IModelConnection, modelId: Id64String, private _wantSkirts: boolean) {
+    super(iModel, modelId);
   }
 
+  public override get requiresLoadedContent() { return false; }
+  public override constructUrl(_row: number, _column: number, _zoomLevel: number): string { assert(false); return ""; }
+  public isTileAvailable(_quadId: QuadId): boolean { return true; }
   public get maxDepth(): number { return 22; }
-  public override getChildHeightRange(_quadId: QuadId, _rectangle: MapCartoRectangle, _parent: MapTile): Range1d | undefined { return scratchZeroRange; }
+  public getChildHeightRange(_quadId: QuadId, _rectangle: MapCartoRectangle, _parent: MapTile): Range1d | undefined { return scratchZeroRange; }
   public get tilingScheme(): MapTilingScheme { return this._tilingScheme; }
 
-  private createSkirtlessPlanarMesh(tile: MapTile): RealityMeshParams {
+  private getPlanarMesh(tile: MapTile): TerrainMeshPrimitive {
     const projection = tile.getProjection();
-    const builder = new RealityMeshParamsBuilder({
-      positionRange: projection.localRange,
-      initialVertexCapacity: 4,
-      initialIndexCapacity: 6,
-    });
+    let mesh: TerrainMeshPrimitive;
+    const skirtProps = { wantSkirts: false, northCount: 0, southCount: 0, eastCount: 0, westCount: 0 };  // Skirts are explicitly created, no need to preallocate
 
-    const uv = new Point2d();
-    const pos = new Point3d();
-    for (let v = 0; v < 2; v++) {
-      for (let u = 0; u < 2; u++) {
-        Point2d.create(u, 1 - v, uv);
-        builder.addUnquantizedVertex(projection.getPoint(u, v, 0, pos), uv);
-      }
-
-    }
-
-    builder.addQuad(0, 1, 2, 3);
-    return builder.finish();
-  }
-
-  private createSkirtedPlanarMesh(tile: MapTile): RealityMeshParams {
-    const projection = tile.getProjection();
-    const positions: Point3d[] = [];
-    const uvs: Point2d[] = [];
-
-    const skirtHeight = tile.range.xLength() / 20;
-    for (let v = 0, i = 0; v < 2; v++) {
-      for (let u = 0; u < 2; u++) {
-        for (let h = 0; h < 2; h++) {
-          positions.push(projection.getPoint(u, v, h * skirtHeight));
-          uvs[i] = new Point2d(u, 1 - v);
-          i++;
+    if (!this._wantSkirts) {
+      mesh = TerrainMeshPrimitive.create({ ...skirtProps, pointQParams: QParams3d.fromRange(projection.localRange), pointCount: 4, indexCount: 6, wantNormals: false });
+      for (let v = 0; v < 2; v++)
+        for (let u = 0; u < 2; u++) {
+          scratchQPoint2d.init(Point2d.create(u, 1 - v, scratchPoint2d), mesh.uvQParams);
+          mesh.addVertex(projection.getPoint(u, v, 0, scratchPoint), scratchQPoint2d);
+        }
+      mesh.addQuad(0, 1, 2, 3);
+    } else {
+      if (!scratch8Points || !scratch8Params) {
+        scratch8Points = new Array<Point3d>();
+        scratch8Params = new Array<Point2d>();
+        for (let i = 0; i < 8; i++) {
+          scratch8Points.push(Point3d.createZero());
+          scratch8Params.push(Point2d.createZero());
         }
       }
+
+      const skirtHeight = tile.range.xLength() / 20.0;
+      for (let v = 0, i = 0; v < 2; v++)
+        for (let u = 0; u < 2; u++)
+          for (let h = 0; h < 2; h++) {
+            scratch8Params[i].set(u, 1 - v);
+            projection.getPoint(u, v, h * skirtHeight, scratch8Points[i]);
+            i++;
+          }
+      mesh = TerrainMeshPrimitive.create({ ...skirtProps, pointQParams: QParams3d.fromRange(Range3d.createArray(scratch8Points)), pointCount: 8, indexCount: 30, wantNormals: false });
+      for (let i = 0; i < 8; i++) {
+        scratchQPoint2d.init(scratch8Params[i], mesh.uvQParams);
+        mesh.addVertex(scratch8Points[i], scratchQPoint2d);
+      }
+
+      mesh.addQuad(0, 2, 4, 6);
+      const reorder = [0, 2, 6, 4, 0];
+      for (let i = 0; i < 4; i++) {
+        const iThis = reorder[i], iNext = reorder[i + 1];
+        mesh.addQuad(iThis, iNext, iThis + 1, iNext + 1);
+      }
     }
-
-    const builder = new RealityMeshParamsBuilder({
-      initialVertexCapacity: 8,
-      initialIndexCapacity: 30,
-      positionRange: Range3d.createArray(positions),
-    });
-
-    for (let i = 0; i < 8; i++)
-      builder.addUnquantizedVertex(positions[i], uvs[i]);
-
-    builder.addQuad(0, 2, 4, 6);
-    const  reorder = [0, 2, 6, 4, 0];
-    for (let i = 0; i < 4; i++) {
-      const iThis = reorder[i], iNext = reorder[i + 1];
-      builder.addQuad(iThis, iNext, iThis + 1, iNext + 1);
-    }
-
-    return builder.finish();
+    assert(mesh.isCompleted);
+    return mesh;
   }
-
-  public override async readMesh(args: ReadMeshArgs): Promise<RealityMeshParams | undefined> {
-    const tile = args.tile;
-    if (tile.isPlanar)
-      return this._wantSkirts ? this.createSkirtedPlanarMesh(tile) : this.createSkirtlessPlanarMesh(tile);
-
-    return this.createGlobeMesh(tile);
-  }
-
-  private createGlobeMesh(tile: MapTile): RealityMeshParams | undefined {
+  private getGlobeMesh(tile: MapTile): TerrainMeshPrimitive | undefined {
     const globeMeshDimension = 10;
     const projection = tile.getProjection();
     const ellipsoidPatch = projection.ellipsoidPatch;
-    assert(undefined !== ellipsoidPatch);
-    if (!ellipsoidPatch)
+
+    if (undefined === ellipsoidPatch) {
+      assert(false);
       return undefined;
+    }
 
     const bordersSouthPole = tile.quadId.bordersSouthPole(this._tilingScheme);
     const bordersNorthPole = tile.quadId.bordersNorthPole(this._tilingScheme);
 
     const range = projection.localRange.clone();
-    const delta = 1 / (globeMeshDimension - 3);
-    const skirtFraction = delta / 2;
-
-    const dimensionM1 = globeMeshDimension - 1;
-    const dimensionM2 = globeMeshDimension - 2;
-
+    const delta = 1.0 / (globeMeshDimension - 3);
+    const skirtFraction = delta / 2.0;
+    const dimensionM1 = globeMeshDimension - 1, dimensionM2 = globeMeshDimension - 2;
     ellipsoidPatch.ellipsoid.transformRef.clone(scratchEllipsoid.transformRef);
     const skirtPatch = EllipsoidPatch.createCapture(scratchEllipsoid, ellipsoidPatch.longitudeSweep, ellipsoidPatch.latitudeSweep);
-    const scaleFactor = Math.max(0.99, 1 - Math.sin(ellipsoidPatch.longitudeSweep.sweepRadians * delta));
+    const scaleFactor = Math.max(.99, 1 - Math.sin(ellipsoidPatch.longitudeSweep.sweepRadians * delta));
     skirtPatch.ellipsoid.transformRef.matrix.scaleColumnsInPlace(scaleFactor, scaleFactor, scaleFactor);
-
     const pointCount = globeMeshDimension * globeMeshDimension;
     const rowMin = (bordersNorthPole || this._wantSkirts) ? 0 : 1;
     const rowMax = (bordersSouthPole || this._wantSkirts) ? dimensionM1 : dimensionM2;
@@ -132,11 +115,7 @@ export class EllipsoidTerrainProvider extends TerrainMeshProvider {
     const colMax = this._wantSkirts ? dimensionM1 : dimensionM2;
     const indexCount = 6 * (rowMax - rowMin) * (colMax - colMin);
 
-    const builder = new RealityMeshParamsBuilder({
-      positionRange: range,
-      initialVertexCapacity: pointCount,
-      initialIndexCapacity: indexCount,
-    });
+    const mesh = TerrainMeshPrimitive.create({ pointQParams: QParams3d.fromRange(range), pointCount, indexCount, wantSkirts: false, northCount: globeMeshDimension, southCount: globeMeshDimension, eastCount: globeMeshDimension, westCount: globeMeshDimension, wantNormals: false });
 
     for (let iRow = 0, index = 0; iRow < globeMeshDimension; iRow++) {
       for (let iColumn = 0; iColumn < globeMeshDimension; iColumn++, index++) {
@@ -157,8 +136,8 @@ export class EllipsoidTerrainProvider extends TerrainMeshProvider {
         } else {
           projection.getPoint(u, v, 0, scratchPoint);
         }
-
-        builder.addUnquantizedVertex(scratchPoint, scratchPoint2d);
+        scratchQPoint2d.init(scratchPoint2d, mesh.uvQParams);
+        mesh.addVertex(scratchPoint, scratchQPoint2d);
       }
     }
 
@@ -166,15 +145,14 @@ export class EllipsoidTerrainProvider extends TerrainMeshProvider {
       for (let iColumn = colMin; iColumn < colMax; iColumn++) {
         const base = iRow * globeMeshDimension + iColumn;
         const top = base + globeMeshDimension;
-        builder.addTriangle(base, base + 1, top);
-        builder.addTriangle(top, base + 1, top + 1);
+        mesh.addTriangle(base, base + 1, top);
+        mesh.addTriangle(top, base + 1, top + 1);
       }
     }
-
-    return builder.finish();
+    assert(mesh.isCompleted);
+    return mesh;
   }
-
-  public override async requestMeshData(): Promise<TileRequest.Response> {
-    return "";
+  public override async getMesh(tile: MapTile, _data: Uint8Array): Promise<TerrainMeshPrimitive | undefined> {
+    return tile.isPlanar ? this.getPlanarMesh(tile) : this.getGlobeMesh(tile);
   }
 }

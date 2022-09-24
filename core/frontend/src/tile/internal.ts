@@ -70,7 +70,6 @@ export * from "./map/MapLayerImageryFormats";
 export * from "./map/MapLayerTileTreeReference";
 export * from "./map/MapTileTree";
 export * from "./map/TerrainMeshProvider";
-export * from "./map/TerrainProvider";
 export * from "./map/CesiumTerrainProvider";
 export * from "./map/EllipsoidTerrainProvider";
 export * from "./map/MapTile";

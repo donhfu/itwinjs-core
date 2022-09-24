@@ -19,7 +19,8 @@ import { GraphicBranch, GraphicBranchOptions } from "../GraphicBranch";
 import { BatchOptions, CustomGraphicBuilderOptions, GraphicBuilder, ViewportGraphicBuilderOptions } from "../GraphicBuilder";
 import { InstancedGraphicParams, PatternGraphicParams } from "../InstancedGraphicParams";
 import { PrimitiveBuilder } from "../primitives/geometry/GeometryListBuilder";
-import { RealityMeshGraphicParams } from "../RealityMeshGraphicParams";
+import { RealityMeshGraphicParams, RealityMeshPrimitive } from "../primitives/mesh/RealityMeshPrimitive";
+import { TerrainMeshPrimitive } from "../primitives/mesh/TerrainMeshPrimitive";
 import { PointCloudArgs } from "../primitives/PointCloudPrimitive";
 import { PointStringParams } from "../primitives/PointStringParams";
 import { PolylineParams } from "../primitives/PolylineParams";
@@ -28,7 +29,6 @@ import { RenderClipVolume } from "../RenderClipVolume";
 import { RenderGraphic, RenderGraphicOwner } from "../RenderGraphic";
 import { CreateRenderMaterialArgs } from "../RenderMaterial";
 import { RenderMemory } from "../RenderMemory";
-import { RealityMeshParams } from "../RealityMeshParams";
 import {
   DebugShaderFile, GLTimerResultCallback, PlanarGridProps, RenderAreaPattern, RenderDiagnostics, RenderGeometry, RenderSkyBoxParams, RenderSystem, RenderSystemDebugControl,
 } from "../RenderSystem";
@@ -534,14 +534,14 @@ export class System extends RenderSystem implements RenderSystemDebugControl, Re
     return PlanarGridGeometry.create(frustum, grid, this);
   }
 
-  public override createTerrainMesh(params: RealityMeshParams, transform?: Transform, disableTextureDisposal = false): RealityMeshGeometry | undefined {
-    return RealityMeshGeometry.createForTerrain(params, transform, disableTextureDisposal);
+  public override createRealityMeshFromTerrain(terrainMesh: TerrainMeshPrimitive, transform?: Transform, disableTextureDisposal = false): RealityMeshGeometry | undefined {
+    return RealityMeshGeometry.createFromTerrainMesh(terrainMesh, transform, disableTextureDisposal);
   }
 
   public override createRealityMeshGraphic(params: RealityMeshGraphicParams, disableTextureDisposal = false): RenderGraphic | undefined {
     return RealityMeshGeometry.createGraphic(this, params, disableTextureDisposal);
   }
-  public override createRealityMesh(realityMesh: RealityMeshParams, disableTextureDisposal = false): RenderGraphic | undefined {
+  public override createRealityMesh(realityMesh: RealityMeshPrimitive, disableTextureDisposal = false): RenderGraphic | undefined {
     const geom = RealityMeshGeometry.createFromRealityMesh(realityMesh, disableTextureDisposal);
     return geom ? Primitive.create(geom) : undefined;
   }

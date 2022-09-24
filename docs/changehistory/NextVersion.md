@@ -11,7 +11,6 @@ Table of contents:
 - [Improved link table selection](improved-link-table-selection)
 - [Cloud storage changes](#cloud-storage-changes)
 - [Display](#display)
-  - [Custom terrain providers](#custom-terrain-providers)
   - [Ambient occlusion improvements](#ambient-occlusion-improvements)
   - [Improved display transform support](#improved-display-transform-support)
   - [Wait for scene completion](#wait-for-scene-completion)
@@ -61,14 +60,6 @@ The existing beta implementations of cloud storage tile cache ([CloudStorageServ
 A different cloud provider may be set in [IModelHostOptions.tileCacheStorage]($backend) and `IModelAppOptions.tileAdmin.tileStorage`, which could be any of [the implementations iTwin/object-storage](https://github.com/iTwin/object-storage/tree/main/storage) provides.
 
 ## Display
-
-### Custom terrain providers
-
-Previously, 3d terrain required access to [Cesium World Terrain](https://cesium.com/platform/cesium-ion/content/cesium-world-terrain/), a paid service. Now, applications can use their own sources of 3d terrain by registering a [TerrainProvider]($frontend) and implementing a [TerrainMeshProvider]($frontend) to produce 3d terrain meshes.
-
-The name of the provider is stored in [TerrainSettings.providerName]($common). The default is "CesiumWorldTerrain".
-
-See [BingTerrainProvider](https://github.com/iTwin/itwinjs-core/blob/master/test-apps/display-test-app/src/frontend/BingTerrainProvider.ts) for an example of a custom terrain provider.
 
 ### Ambient occlusion improvements
 
